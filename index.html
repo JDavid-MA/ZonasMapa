@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Zonas de Paquetes</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; padding: 12px 16px; margin: 0; background: #f8f9fa; color: #1c1c1c; }
+    .label { font-size: 11px; font-weight: bold; color: #444; margin-bottom: 4px; text-transform: uppercase; }
+    input[type=text], input[type=password] {
+      width: 100%; padding: 10px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; background: #fff;
+    }
+    input:focus { outline: none; border-color: #1a73e8; box-shadow: 0 0 0 2px rgba(26,115,232,.2); }
+    .btn { width: 100%; padding: 11px; border: none; border-radius: 6px; font-size: 14px; font-weight: bold; cursor: pointer; margin-bottom: 8px; }
+    .btn-green { background: #1a6b2e; color: #fff; }
+    .btn-gray  { background: #e0e0e0; color: #333; }
+    .btn-blue  { background: #0b57d0; color: #fff; }
+    .fila { display: flex; gap: 8px; }
+    .fila .btn { flex: 1; }
+    .fila input { flex: 1; margin-bottom: 8px; }
+    .fila .btn-corto { flex: 0 0 auto; width: auto; padding: 11px 16px; }
+
+    #lector-camara { width: 100%; height: 150px; margin-bottom: 8px; display: none; border-radius: 8px; overflow: hidden; background: #000; }
+    #lector-camara video { width: 100% !important; height: 150px !important; object-fit: cover; }
+    #lector-camara img { display: none; }
+    #btnDetener { display: none; }
+
+    #tarjeta { border-radius: 10px; padding: 12px; background: #fff; border: 1px solid #ddd; margin-bottom: 10px; min-height: 120px; }
+    #tarjeta .trk { font-family: Consolas, monospace; font-size: 13px; color: #595959; }
+    #tarjeta .zona { font-size: 44px; font-weight: 800; color: #fff; border-radius: 8px; padding: 10px; margin: 6px 0; text-align: center; line-height: 1.1; }
+    #tarjeta .zona .sub { font-size: 18px; font-weight: 600; margin-top: 4px; }
+    #tarjeta .dir { font-size: 17px; font-weight: bold; margin-top: 4px; }
+    #tarjeta .cliente { font-size: 15px; margin-top: 2px; }
+    #tarjeta .origen { font-size: 14px; color: #333; margin-top: 6px; }
+    #tarjeta .mapa { display: block; margin-top: 10px; padding: 10px; border-radius: 6px; background: #e8f0fe; color: #0b57d0;
+                     text-align: center; font-weight: bold; text-decoration: none; }
+    #mapita { height: 260px; margin-top: 8px; border-radius: 8px; border: 1px solid #ccc; }
+    .leyenda { font-size: 13px; margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px 12px; }
+    .leyenda i { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 4px; vertical-align: -1px; }
+    #tarjeta .vacio { color: #595959; text-align: center; padding-top: 40px; }
+
+    .msg { padding: 9px 12px; border-radius: 6px; margin-bottom: 10px; font-size: 14px; text-align: center; display: none; }
+    .msg.ok   { background: #e6f4ea; color: #1e6d38; display: block; }
+    .msg.err  { background: #fce8e6; color: #a50e0e; display: block; }
+    #info { font-size: 12px; color: #595959; text-align: center; margin: 4px 0 10px; }
+    .divider { border: none; border-top: 1px solid #e0e0e0; margin: 12px 0; }
+  </style>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js" type="text/javascript"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+</head>
+<body>
+
+  <div id="login" style="display:none">
+    <div class="label">Clave de Zonas</div>
+    <input type="password" id="inputClave" placeholder="Escribe la clave" autocomplete="current-password"
+           onkeydown="if (event.key === 'Enter') entrar()">
+    <button class="btn btn-green" onclick="entrar()">Entrar</button>
+    <div id="msgLogin" class="msg"></div>
+  </div>
+
+  <div id="app" style="display:none">
+    <div class="fila">
+      <button type="button" class="btn btn-blue" onclick="iniciarCamara()">📷 Cámara</button>
+      <button type="button" class="btn btn-blue" onclick="abrirFoto()">🖼️ Foto</button>
+    </div>
+    <input type="file" id="inputFoto" accept="image/*" capture="environment" style="display:none" onchange="leerFoto(event)">
+    <div id="lector-camara"></div>
+    <button type="button" id="btnDetener" class="btn btn-gray" onclick="detenerCamara()">✕ Cerrar cámara</button>
+
+    <div id="msg" class="msg"></div>
+    <div id="tarjeta" aria-live="polite"><div class="vacio">Escanea un paquete para ver su zona</div></div>
+
+    <div class="fila">
+      <input type="text" id="tracking" placeholder="Escribir o pistola…" onkeydown="if (event.key === 'Enter') buscarEscrito()" autocomplete="off">
+      <button class="btn btn-green btn-corto" onclick="buscarEscrito()">Ver</button>
+    </div>
+    <div id="info"></div>
+
+    <hr class="divider">
+    <button class="btn btn-gray" onclick="actualizarDatos(true)">⟳ Actualizar datos</button>
+    <button class="btn btn-gray" onclick="salir()">🔒 Cerrar sesión en este celular</button>
+  </div>
+
+  <div id="lector-foto" style="display:none"></div>
+
+  <script>
+    // ================= CONFIGURACIÓN =================
+    // URL /exec de la app web de la hoja "Zonas de Paquetes" (NO la del registro)
+    var API_URL = 'https://script.google.com/macros/s/AKfycbwqa7rxZho1-OMntmPEDEOBYpaGl8o-IbhbqTV23YoK7CGq4srgQRhTC54I8V5y-UJ4/exec';
+    var CLAVE = '1111';
+    var COLORES = {
+      // Mismos colores que las capas de My Maps (ZONA MOT.kml). SLD Puno es amarillo: su tarjeta va con letra negra.
+      // REVISAR en rojo porque el naranja se confundía con Capilla.
+      'Centro 1': '#9c27b0', 'Centro 2': '#795548', 'San Miguel': '#0f9d58', 'Rinconada': '#1a237e',
+      'Capilla': '#e65100', 'SLD Puno': '#ffea00', 'SLD AQP': '#817717', 'REVISAR': '#c62828'
+    };
+
+    // ==PURO== (sin pantalla; lo prueba tests/paginas.test.js)
+    // La MISMA expresión está en apps-script/zonas/Logica.js, apps-script/registro/Codigo.gs e index.html.
+    var TRACKING_RE = /(?:^|[^A-Z0-9])(MLPE\d{9}R|MLPE\d{7}[RE]|MLAPE\d{9}TEM|[A-Z]{2}\d{9}[A-Z]{2})(?![A-Z0-9])/;
+
+    function extraerTracking(texto) {
+      var m = String(texto || '').trim().toUpperCase().match(TRACKING_RE);
+      return m ? m[1] : '';
+    }
+
+    // info = [zona, motorizados de la zona, origen, entregado/asignado a, veces, dirección, distrito, cliente] → qué mostrar
+    function textoZona(info) {
+      if (!info) return {titulo: 'No está en Direcciones', sub: '', color: '#555', chico: true};
+      if (info[0] === 'SIN ANTECEDENTE') return {titulo: 'Sin antecedente', sub: 'Consultar', color: '#555', chico: true};
+      if (info[0] === 'REVISAR') return {titulo: 'Revisar: varias zonas', sub: '', color: COLORES.REVISAR, chico: true};
+      return {titulo: info[0], sub: info[1], color: COLORES[info[0]] || '#555', chico: false};
+    }
+
+    function textoOrigen(info) {
+      if (!info) return 'Agrega su control de carga en la hoja de Zonas y toca "Actualizar datos".';
+      if (info[2] === 'Entregado') return 'Este paquete ya fue entregado por: ' + info[3];
+      if (info[2] === 'Registro') return 'Asignado en el control a: ' + info[3];
+      var veces = ' (' + info[4] + (info[4] == 1 ? ' vez)' : ' veces)');
+      if (info[2] === 'Dirección') return 'Dirección ya fue entregada por: ' + info[3] + veces;
+      if (info[2] === 'Cliente') return 'Cliente ya recibió antes de: ' + info[3] + veces;
+      if (info[2] === 'Varias zonas') return 'Antes lo entregaron: ' + info[3] + '. Consulta antes de separar.';
+      return 'Nadie de la lista entregó antes a esta dirección ni a este cliente. Consulta antes de separar.';
+    }
+
+    function linkMaps(info) {
+      if (!info || !info[5]) return '';
+      return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(info[5] + ', ' + (info[6] || 'Juliaca') + ', Puno, Perú');
+    }
+    // cercanos = [[lat, lng, motorizado, zona, dirección]] → [[zona · motorizado, color, cuántas]] (más entregas primero)
+    function leyenda(cercanos) {
+      var c = {};
+      cercanos.forEach(function (p) {
+        var k = p[3] + ' · ' + p[2];
+        c[k] = c[k] || [k, COLORES[p[3]] || '#555', 0];
+        c[k][2]++;
+      });
+      return Object.keys(c).map(function (k) { return c[k]; }).sort(function (a, b) { return b[2] - a[2]; });
+    }
+    // ==FIN PURO==
+
+    function leerLS(k, d) { try { var v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } }
+    function guardarLS(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+    function leerClave() { try { return localStorage.getItem('claveZonas') || ''; } catch (e) { return ''; } }
+    function guardarClave(c) { try { localStorage.setItem('claveZonas', c); } catch (e) {} }
+    function borrarClave() { try { localStorage.removeItem('claveZonas'); } catch (e) {} }
+
+    function api(accion, extra) {
+      var cuerpo = { accion: accion, clave: CLAVE };
+      for (var k in (extra || {})) cuerpo[k] = extra[k];
+      return fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // evita bloqueo CORS
+        body: JSON.stringify(cuerpo)
+      }).then(function (r) { return r.json(); });
+    }
+
+    // ================= ACCESO =================
+    function mostrarLogin(m) {
+      document.getElementById('app').style.display = 'none';
+      document.getElementById('login').style.display = 'block';
+      var el = document.getElementById('msgLogin');
+      if (m) { el.textContent = m; el.className = 'msg err'; } else { el.className = 'msg'; }
+      document.getElementById('inputClave').focus();
+    }
+
+    function entrar() {
+      var c = document.getElementById('inputClave').value.trim();
+      if (c) iniciar(c, true);
+    }
+
+    function iniciar(clave, desdeLogin) {
+      CLAVE = clave;
+      actualizarDatos(false).then(function (ok) {
+        if (ok === 'clave') { borrarClave(); mostrarLogin(desdeLogin ? 'Clave incorrecta' : ''); return; }
+        if (ok === 'red' && !Object.keys(DATOS).length) { mostrarLogin('No se pudo conectar. Revisa tu internet.'); return; }
+        guardarClave(clave);
+        document.getElementById('login').style.display = 'none';
+        document.getElementById('app').style.display = 'block';
+      });
+    }
+
+    function salir() {
+      detenerCamara();
+      borrarClave();
+      CLAVE = '';
+      document.getElementById('inputClave').value = '';
+      mostrarLogin('');
+    }
+
+    // ================= DATOS (se descargan una vez; buscar es instantáneo) =================
+    var DATOS = leerLS('datosZonas3', {});
+    var actualizado = leerLS('datosZonas3Hora', '');
+
+    function mostrarInfo() {
+      var n = Object.keys(DATOS).length;
+      document.getElementById('info').textContent = n ? n + ' paquetes cargados · actualizado ' + actualizado : 'Sin datos cargados';
+    }
+
+    // Devuelve 'ok', 'clave' o 'red'
+    function actualizarDatos(manual) {
+      return api('datos').then(function (r) {
+        if (r.error === 'Clave incorrecta') return 'clave';
+        if (r.error) throw new Error(r.error);
+        DATOS = r.data || {};
+        actualizado = new Date().toLocaleString('es-PE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+        guardarLS('datosZonas3', DATOS);
+        guardarLS('datosZonas3Hora', actualizado);
+        mostrarInfo();
+        if (manual) mostrarMsg('Datos actualizados', 'ok');
+        return 'ok';
+      }).catch(function () {
+        mostrarInfo();
+        if (manual) mostrarMsg('No se pudo actualizar (sin conexión). Se usan los datos guardados.', 'err');
+        return 'red';
+      });
+    }
+    setInterval(function () { if (CLAVE) actualizarDatos(false); }, 10 * 60 * 1000);
+
+    // ================= MOSTRAR =================
+    function pitido(ok) {
+      try {
+        var a = pitido.ctx = pitido.ctx || new (window.AudioContext || window.webkitAudioContext)();
+        var o = a.createOscillator(), g = a.createGain();
+        o.frequency.value = ok ? 1200 : 300; g.gain.value = 0.15;
+        o.connect(g); g.connect(a.destination); o.start(); o.stop(a.currentTime + (ok ? 0.08 : 0.3));
+      } catch (e) {}
+      if (navigator.vibrate) navigator.vibrate(ok ? 80 : [80, 60, 80]);
+    }
+
+    function mostrar(texto) {
+      var trk = extraerTracking(texto);
+      if (!trk) { pitido(false); mostrarMsg('Lectura no válida, vuelve a escanear: ' + String(texto).slice(0, 25), 'err'); return; }
+      ocultarMsg();
+      var info = DATOS[trk];
+      var z = textoZona(info);
+      var t = document.getElementById('tarjeta');
+      t.textContent = '';
+      var add = function (clase, txt) { var d = document.createElement('div'); d.className = clase; d.textContent = txt; t.appendChild(d); return d; };
+      add('trk', trk);
+      var caja = add('zona', z.titulo);
+      caja.style.background = z.color;
+      caja.style.color = z.color === COLORES['SLD Puno'] ? '#000' : '';
+      if (z.chico) caja.style.fontSize = '26px';
+      if (z.sub) { var sub = document.createElement('div'); sub.className = 'sub'; sub.textContent = z.sub; caja.appendChild(sub); }
+      if (info && info[5]) add('dir', info[5] + (info[6] ? ' – ' + info[6] : ''));
+      if (info && info[7]) add('cliente', 'Cliente: ' + info[7]);
+      add('origen', textoOrigen(info));
+      var url = linkMaps(info);
+      if (url) {
+        var a = document.createElement('a');
+        a.className = 'mapa'; a.href = url; a.target = '_blank'; a.rel = 'noopener'; a.textContent = '📍 Ver en Google Maps';
+        t.appendChild(a);
+      }
+      if (info && info[5]) mapita(t, trk, info);
+      pitido(!!info && !z.chico);
+    }
+
+    // Mapita: el paquete (punto negro) y las entregas de tus motorizados a ≤600 m, con el color de su zona.
+    var MAPA = null, MAPA_TRK = '';
+    function mapita(t, trk, info) {
+      if (MAPA) { MAPA.remove(); MAPA = null; }
+      MAPA_TRK = trk;
+      var estado = document.createElement('div'); estado.className = 'origen'; estado.textContent = '🗺️ Ubicando en el mapa…';
+      t.appendChild(estado);
+      if (!window.L) { estado.textContent = 'Mapa no disponible (sin internet).'; return; }
+      api('ubicar', { direccion: info[5], distrito: info[6] || '' }).then(function (r) {
+        if (MAPA_TRK !== trk) return; // ya se escaneó otro paquete
+        if (r.error) { estado.textContent = 'Mapa: ' + r.error; return; }
+        if (r.lat === '') { estado.textContent = '🗺️ Google no ubicó esta dirección con precisión (' + r.precision + '). Usa el botón de Google Maps.'; return; }
+        estado.textContent = '🗺️ Ubicación: ' + r.precision + ' · entregas cerca (600 m): ' + r.cercanos.length;
+        var div = document.createElement('div'); div.id = 'mapita';
+        t.appendChild(div);
+        MAPA = L.map(div, { attributionControl: true }).setView([r.lat, r.lng], 16);
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(MAPA);
+        r.cercanos.forEach(function (p) {
+          L.circleMarker([p[0], p[1]], { radius: 7, color: '#fff', weight: 1, fillColor: COLORES[p[3]] || '#555', fillOpacity: 0.9 })
+            .bindPopup(p[3] + ' · ' + p[2] + '<br>' + String(p[4]).replace(/</g, '&lt;')).addTo(MAPA);
+        });
+        L.circleMarker([r.lat, r.lng], { radius: 11, color: '#fff', weight: 3, fillColor: '#000', fillOpacity: 1 })
+          .bindPopup('Este paquete').addTo(MAPA);
+        var ley = document.createElement('div'); ley.className = 'leyenda';
+        leyenda(r.cercanos).forEach(function (x) {
+          var s = document.createElement('span');
+          var b = document.createElement('i'); b.style.background = x[1];
+          s.appendChild(b); s.appendChild(document.createTextNode(x[0] + ' (' + x[2] + ')'));
+          ley.appendChild(s);
+        });
+        if (!r.cercanos.length) ley.textContent = 'Ninguna entrega de tus motorizados a menos de 600 m.';
+        t.appendChild(ley);
+      }).catch(function () { if (MAPA_TRK === trk) estado.textContent = 'Mapa: sin conexión.'; });
+    }
+
+    function buscarEscrito() {
+      var c = document.getElementById('tracking');
+      if (c.value.trim()) mostrar(c.value);
+      c.value = '';
+    }
+
+    function mostrarMsg(txt, tipo) {
+      var el = document.getElementById('msg');
+      el.textContent = txt; el.className = 'msg ' + tipo;
+      clearTimeout(mostrarMsg.t);
+      if (tipo === 'ok') mostrarMsg.t = setTimeout(ocultarMsg, 2000);
+    }
+    function ocultarMsg() { document.getElementById('msg').className = 'msg'; }
+
+    // ================= CÁMARA =================
+    var scanner = null, camaraActiva = false, ultimo = '', ultimoMs = 0;
+
+    function formatos() {
+      var F = Html5QrcodeSupportedFormats;
+      return [F.CODE_128, F.CODE_39, F.CODE_93, F.QR_CODE];
+    }
+
+    function iniciarCamara() {
+      if (typeof Html5Qrcode === 'undefined') { mostrarMsg('No se pudo cargar el lector. Revisa tu internet.', 'err'); return; }
+      if (camaraActiva) return;
+      var visor = document.getElementById('lector-camara');
+      visor.style.display = 'block';
+      document.getElementById('btnDetener').style.display = 'block';
+      scanner = scanner || new Html5Qrcode('lector-camara', {
+        formatsToSupport: formatos(), experimentalFeatures: { useBarCodeDetectorIfSupported: true }, verbose: false
+      });
+      scanner.start({ facingMode: 'environment' }, { fps: 15, aspectRatio: 2.4 }, function (codigo) {
+        if (codigo === ultimo && Date.now() - ultimoMs < 2500) return; // mismo paquete aún frente a la cámara
+        ultimo = codigo; ultimoMs = Date.now();
+        mostrar(codigo);
+      }, function () {})
+      .then(function () { camaraActiva = true; })
+      .catch(function (err) {
+        visor.style.display = 'none';
+        document.getElementById('btnDetener').style.display = 'none';
+        var d = (err && (err.name || err.message)) ? err.name + ': ' + err.message : String(err);
+        mostrarMsg((/NotAllowed|Permission/i.test(d) ? 'Permiso de cámara bloqueado: candado de la barra → Cámara → Permitir. ' : 'No se pudo abrir la cámara. ') + '[' + d + ']', 'err');
+      });
+    }
+
+    function detenerCamara() {
+      var fin = function () {
+        camaraActiva = false;
+        document.getElementById('lector-camara').style.display = 'none';
+        document.getElementById('btnDetener').style.display = 'none';
+      };
+      if (scanner && camaraActiva) return scanner.stop().then(fin).catch(fin);
+      fin();
+    }
+
+    function abrirFoto() { document.getElementById('inputFoto').click(); }
+
+    function leerFoto(e) {
+      var f = e.target.files && e.target.files[0];
+      if (!f || typeof Html5Qrcode === 'undefined') return;
+      var lector = new Html5Qrcode('lector-foto', { formatsToSupport: formatos(), experimentalFeatures: { useBarCodeDetectorIfSupported: true }, verbose: false });
+      lector.scanFile(f, false).then(mostrar)
+        .catch(function () { mostrarMsg('No se detectó el código. Acércate más y que salga nítido.', 'err'); })
+        .finally(function () { try { lector.clear(); } catch (x) {} e.target.value = ''; });
+    }
+
+    window.onload = function () {
+      mostrarInfo();
+      var c = leerClave();
+      if (c) iniciar(c, false); else mostrarLogin('');
+    };
+  </script>
+</body>
+</html>
