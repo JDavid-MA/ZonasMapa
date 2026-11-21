@@ -360,6 +360,11 @@
     }
 
     window.onload = function () {
+      // Pie con versión y final de la URL: si no coincide con la /exec publicada, el celular abre otro zonas.html.
+      var pie = document.createElement('div');
+      pie.style.cssText = 'font-size:11px;color:#777;text-align:center;margin:16px 0 8px';
+      pie.textContent = 'Versión mapita 20-11 · API …' + API_URL.slice(-14, -5);
+      document.body.appendChild(pie);
       mostrarInfo();
       var c = leerClave();
       if (c) iniciar(c, false); else mostrarLogin('');
